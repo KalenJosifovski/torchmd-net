@@ -44,6 +44,18 @@ mamba install torchmd-net cuda-version=11.8
 mamba install torchmd-net cuda-version=12.4
 ```
 
+### macOS (Apple Silicon / MPS)
+
+On macOS arm64, install the CPU wheel and use the MPS device in PyTorch:
+
+```shell
+pip install torchmd-net-cpu --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
+Then select `device="mps"` in your training/inference code and verify availability with
+`torch.backends.mps.is_available()`. If you hit unsupported PyTorch ops elsewhere, you can
+temporarily enable PyTorch's MPS fallback via `PYTORCH_ENABLE_MPS_FALLBACK=1`.
+
 ### Install from source  
 
 TorchMD-Net is installed using pip, but you will need to install some dependencies before. Check [this documentation page](https://torchmd-net.readthedocs.io/en/latest/installation.html#install-from-source).  
@@ -231,4 +243,3 @@ We use [black](https://https://black.readthedocs.io/en/stable/). Please run `bla
 ### Testing
 
 To run the tests, install the package and run `pytest` in the root directory of the repository. Tests are a good source of knowledge on how to use the different components of the package.  
-
