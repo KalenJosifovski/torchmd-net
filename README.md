@@ -1,3 +1,63 @@
+# Unofficial Compatibility Patch Fork Notice
+
+This repository is an **unofficial fork** and is **not** maintained by the upstream TorchMD-Net project.
+
+Use this fork at your own discretion. The changes here are intended as a **compatibility patch** for projects that depend on older TorchMD-Net neighbor-pair behavior.
+
+Fork base:
+- Upstream project: `torchmd/torchmd-net`
+- Forked from upstream commit: `75b16e6` (the upstream `main` state this fork branch was created from)
+
+What was changed in this fork and why:
+1. **Dispatcher registrations were made explicit in the legacy C++ extension**
+   - In older states of this code, backend dispatch could fail for `get_neighbor_pairs` when running on CPU or MPS.
+   - This fork adds explicit backend bindings so the operator resolves correctly by device key.
+
+   ```cpp
+   TORCH_LIBRARY_IMPL(torchmdnet_extensions, CPU, m) {
+       m.impl("get_neighbor_pairs", /* calls NeighborAutograd::apply(...) */);
+   }
+
+   TORCH_LIBRARY_IMPL(torchmdnet_extensions, MPS, m) {
+       m.impl("get_neighbor_pairs", /* calls NeighborAutograd::apply(...) */);
+   }
+   ```
+
+2. **Forward/backward op routes were registered so autograd dispatch can complete**
+   - The autograd wrapper calls internal ops:
+     - `torchmdnet_extensions::get_neighbor_pairs_fwd`
+     - `torchmdnet_extensions::get_neighbor_pairs_bkwd`
+   - This fork registers CPU/MPS/CUDA combinations needed by that call chain.
+
+   ```cpp
+   TORCH_LIBRARY_IMPL(torchmdnet_extensions, CPU, m) {
+       m.impl("get_neighbor_pairs_fwd", forward_impl);
+       m.impl("get_neighbor_pairs_bkwd", backward_impl);
+   }
+   ```
+
+3. **A regression test was added to lock in behavior**
+   - New test verifies:
+     - kernel presence in dispatcher for CPU/MPS
+     - output correctness against a small reference implementation.
+
+   ```python
+   assert torch._C._dispatch_has_kernel_for_dispatch_key(
+       "torchmdnet_extensions::get_neighbor_pairs", "CPU"
+   )
+   ```
+
+4. **Why this was done**
+   - Goal: prevent backend `NotImplemented`/dispatch failures in legacy CPU and MPS usage.
+   - This is a compatibility patch for existing downstream code that depends on the older extension path.
+
+5. **Scope and non-goals**
+   - This does **not** add a dedicated native Metal shader/kernel implementation.
+   - MPS usability is improved from a dispatch-compatibility perspective, but this is not a custom MPS acceleration rewrite.
+
+---
+The after these 3 dashed lines will be the official unedited README.
+
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![CI](https://github.com/torchmd/torchmd-net/actions/workflows/workflow.yml/badge.svg)](https://github.com/torchmd/torchmd-net/actions/workflows/workflow.yml)
 [![Documentation Status](https://readthedocs.org/projects/torchmd-net/badge/?version=latest)](https://torchmd-net.readthedocs.io/en/latest/?badge=latest)  
@@ -43,18 +103,6 @@ We recommend using [Miniforge](https://github.com/conda-forge/miniforge/) instea
 mamba install torchmd-net cuda-version=11.8
 mamba install torchmd-net cuda-version=12.4
 ```
-
-### macOS (Apple Silicon / MPS)
-
-On macOS arm64, install the CPU wheel and use the MPS device in PyTorch:
-
-```shell
-pip install torchmd-net-cpu --extra-index-url https://download.pytorch.org/whl/cpu
-```
-
-Then select `device="mps"` in your training/inference code and verify availability with
-`torch.backends.mps.is_available()`. If you hit unsupported PyTorch ops elsewhere, you can
-temporarily enable PyTorch's MPS fallback via `PYTORCH_ENABLE_MPS_FALLBACK=1`.
 
 ### Install from source  
 
